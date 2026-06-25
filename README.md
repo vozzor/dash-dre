@@ -4,12 +4,6 @@ Dashboard financeiro de **DRE (Demonstrativo de Resultado do Exercício)** multi
 
 O DRE é calculado em **regime de caixa** (cada lançamento é atribuído ao mês em que foi efetivamente pago/recebido) e o projeto foi construído para o **setor de eventos**, cuja receita é fortemente sazonal — o que se reflete nas análises, na narrativa automática e nos prompts da IA.
 
-## Screenshots
-
-![Dashboard](docs/screenshot.png)
-
-<!-- TODO: adicionar screenshot real -->
-
 ## Funcionalidades
 
 - DRE mensal/anual por empresa ou consolidado (3 empresas + visão consolidada)
