@@ -19,7 +19,7 @@ import anthropic
 import pandas as pd
 from google.cloud import bigquery
 
-from dre_queries import DRE_LINES, SALDOS_INICIAIS, _CONSOLIDADO_DATASETS, get_dre, get_dre_categorias
+from dre_queries import DRE_LINES, SALDOS_INICIAIS, _CONSOLIDADO_DATASETS, eval_formula, get_dre, get_dre_categorias
 
 # ---------------------------------------------------------------------------
 # Configurações
@@ -302,8 +302,6 @@ def _valores_para_df(valores: dict[int, dict[int, float]],
 def _aplicar_formulas(valores: dict[int, dict[int, float]],
                       empresa: str = "", ano: int = 0) -> dict[int, dict[int, float]]:
     """Recalcula linhas-fórmula do DRE a partir dos valores base."""
-    import re
-
     result = {lid: dict(meses) for lid, meses in valores.items()}
 
     # Garantir que todas as linhas existam
@@ -346,19 +344,10 @@ def _aplicar_formulas(valores: dict[int, dict[int, float]],
             continue
 
         expr = line["formula"]
-        tokens = re.split(r"(\s*[+\-]\s*)", expr)
-
         for mes in range(1, 13):
-            parts = []
-            for tok in tokens:
-                tok_s = tok.strip()
-                if tok_s in ("+", "-"):
-                    parts.append(f" {tok_s} ")
-                elif re.match(r"^\d+$", tok_s):
-                    parts.append(str(result.get(int(tok_s), {}).get(mes, 0.0)))
-                else:
-                    parts.append(tok)
-            result[lid][mes] = float(eval("".join(parts)))  # safe: gerado internamente
+            result[lid][mes] = eval_formula(
+                expr, lambda ref, m=mes: result.get(ref, {}).get(m, 0.0)
+            )
 
     return result
 
@@ -602,8 +591,7 @@ Exemplo (abstrato — note que despesas também são positivas):
 
     raw = message.content[0].text.strip()
     if "```" in raw:
-        import re as _re
-        match = _re.search(r"```(?:json)?\s*([\s\S]+?)```", raw)
+        match = re.search(r"```(?:json)?\s*([\s\S]+?)```", raw)
         if match:
             raw = match.group(1).strip()
 
@@ -727,44 +715,6 @@ Diretrizes:
         model="claude-haiku-4-5-20251001",
         max_tokens=300,
         messages=[{"role": "user", "content": prompt}],
-    )
-    return msg.content[0].text.strip()
-
-
-# ---------------------------------------------------------------------------
-# Chat com os Dados (Claude API)
-# ---------------------------------------------------------------------------
-
-def chat_com_dados(
-    mensagens: list[dict],
-    contexto_dre: str,
-    empresa_label: str,
-    ano: int,
-) -> str:
-    """
-    Chat conversacional com os dados do DRE.
-    mensagens: lista de {"role": "user"|"assistant", "content": "..."}
-    """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        return "⚠️ ANTHROPIC_API_KEY não configurada."
-
-    system = f"""Você é um assistente financeiro especialista nos resultados da {empresa_label} ({ano}).
-Responda perguntas baseando-se exclusivamente nos dados do DRE abaixo.
-Use valores em R$ com formatação legível (ex: R$ 1,2M ou R$ 850K).
-Seja objetivo e prático — o usuário é um gestor financeiro tomando decisões.
-Se a pergunta não puder ser respondida com os dados disponíveis, diga claramente.
-
-=== DRE {ano} — {empresa_label} ===
-{contexto_dre}
-====================================="""
-
-    client = anthropic.Anthropic(api_key=api_key)
-    msg = client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=2048,
-        system=system,
-        messages=mensagens[-20:],  # limite de contexto conversacional
     )
     return msg.content[0].text.strip()
 

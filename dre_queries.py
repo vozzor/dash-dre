@@ -7,7 +7,6 @@ e IDs específicos de categorias para os itens sem mapeamento direto.
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 
 import pandas as pd
@@ -743,24 +742,42 @@ def _calc_linha(line: dict, raw: pd.DataFrame, mes: str) -> float:
     return subset[combined]["valor"].sum()
 
 
+def eval_formula(expr: str, lookup) -> float:
+    """Avalia uma fórmula do DRE (ex.: "16 + 17 - 18") sem usar eval().
+
+    As fórmulas são compostas apenas por IDs de linha (inteiros) e os
+    operadores binários '+' e '-'. Como ambos são associativos à esquerda,
+    basta dobrar os termos da esquerda para a direita aplicando o sinal
+    corrente. `lookup(line_id)` retorna o valor da linha referenciada.
+    """
+    tokens = expr.split()
+    total = 0.0
+    sign = 1.0
+    expect_operand = True
+    for tok in tokens:
+        if tok == "+":
+            sign = 1.0
+            expect_operand = True
+        elif tok == "-":
+            sign = -1.0
+            expect_operand = True
+        elif expect_operand:
+            total += sign * float(lookup(int(tok)) or 0.0)
+            expect_operand = False
+        else:
+            raise ValueError(f"Fórmula DRE inválida: {expr!r}")
+    return total
+
+
 def _apply_formulas(values: dict[int, float]) -> dict[int, float]:
     """Avalia as fórmulas do DRE em ordem de dependência."""
     formula_lines = sorted(
         [l for l in DRE_LINES if l.get("is_formula")], key=lambda x: x["id"]
     )
     for line in formula_lines:
-        expr = line["formula"]
-        tokens = re.split(r"(\s*[+\-]\s*)", expr)
-        parts = []
-        for tok in tokens:
-            tok_s = tok.strip()
-            if tok_s in ("+", "-"):
-                parts.append(f" {tok_s} ")
-            elif re.match(r"^\d+$", tok_s):
-                parts.append(str(values.get(int(tok_s), 0.0)))
-            else:
-                parts.append(tok)
-        values[line["id"]] = float(eval("".join(parts)))  # safe: gerado internamente
+        values[line["id"]] = eval_formula(
+            line["formula"], lambda lid: values.get(lid, 0.0)
+        )
     return values
 
 

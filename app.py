@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import date
+
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -206,7 +208,6 @@ _DENIED_HTML = """<!DOCTYPE html>
 
 @server.route("/login")
 def login():
-    from datetime import date
     if session.get("user"):
         return redirect("/")
     return render_template_string(_LOGIN_HTML, error=None, year=date.today().year)
@@ -220,7 +221,6 @@ def auth_google():
 
 @server.route("/auth/callback")
 def auth_callback():
-    from datetime import date
     token = oauth.google.authorize_access_token()
     userinfo = token.get("userinfo") or oauth.google.userinfo()
     email = (userinfo.get("email") or "").lower()
@@ -1393,7 +1393,6 @@ def carregar_dre_prev(year: int, _refresh, company: str):
           Input("store-company", "data"))
 @cache.memoize(timeout=3600)
 def carregar_cats(year: int, _refresh, company: str):
-    import json
     cats = get_dre_categorias(year, company)
     return json.dumps(cats, ensure_ascii=False)
 
@@ -1719,7 +1718,6 @@ def atualizar_tabela(data, data_prev, cats_json, expanded, modo, acum_mes, year)
     if not data:
         return html.P("Carregando...", className="p-3 text-muted")
 
-    import json
     df      = pd.read_json(data, orient="records")
     df_prev = pd.read_json(data_prev, orient="records") if data_prev else df.copy()
     cats    = json.loads(cats_json) if cats_json else {}
